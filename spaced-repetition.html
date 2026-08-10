@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Учитель Слов</title>
+  <title>Интервальное повторение</title>
   <style>
     * { box-sizing: border-box; user-select: none; font-family: system-ui, sans-serif; }
     body { margin: 0; padding: 16px; background: #131f24; color: #fff; display: flex; flex-direction: column; min-height: 100dvh; max-width: 480px; margin: 0 auto; }
@@ -29,7 +29,7 @@
     .btn-export { background: #ffc800; border-bottom-color: #d7a800; color: #131f24; }
     .btn-delete-learned { background: #202f36; border: 1px solid #ea2b2b; color: #ff4b4b; border-radius: 12px; padding: 12px; font-size: 13px; font-weight: bold; cursor: pointer; width: 100%; }
     
-    .quiz-prompt { background: #202f36; border: 2px solid #37464f; border-radius: 16px; padding: 16px; text-align: center; font-size: 22px; font-weight: bold; min-height: 70px; display: flex; align-items: center; justify-content: center; }
+    .quiz-prompt { background: #202f36; border: 2px solid #37464f; border-radius: 16px; padding: 30px; text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 20px; flex-grow: 1; display: flex; align-items: center; justify-content: center; }
     .input-field { width: 100%; background: #202f36; border: 2px solid #37464f; border-radius: 12px; padding: 14px; color: #fff; font-size: 16px; text-align: center; outline: none; }
 
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
@@ -79,17 +79,17 @@
     </div>
 
     <div class="status" id="menu-status">Загрузка...</div>
-    <button class="menu-btn" onclick="startMode('match')">⚡ Match Madness (Пары) <span>➔</span></button>
-    <button class="menu-btn" onclick="startMode('quiz')">🎯 4 Варианта <span>➔</span></button>
-    <button class="menu-btn" onclick="startMode('cards')">🎴 Флеш-карточки <span>➔</span></button>
-    <button class="menu-btn" onclick="startMode('input')">⌨️ Ввод с клавиатуры <span>➔</span></button>
+    <button class="menu-btn" onclick="startMode('match')">⚡ Speed Matching <span>➔</span></button>
+    <button class="menu-btn" onclick="startMode('quiz')">🎯 1 из 4 <span>➔</span></button>
+    <button class="menu-btn" onclick="startMode('cards')">🎴 Карточки <span>➔</span></button>
+    <button class="menu-btn" onclick="startMode('input')">⌨️ Прямым текстом <span>➔</span></button>
 
     <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
-      <button class="btn-delete-learned" onclick="openDeleteModal()">🗑️/📤 ОЧИСТКА ВЫУЧЕННЫХ</button>
-      <label for="file-input" class="file-label">📂 ЗАГРУЗИТЬ JSON (СЛОВАРЬ ИЛИ БЭКАП)</label>
+      <button class="btn-delete-learned" onclick="openDeleteModal()">🗑️/📤 убрать выученные слова из словаря</button>
+      <label for="file-input" class="file-label">📂 ЗАГРУЗИТЬ СЛОВАРЬ/ВОССТАНОВИТЬ ПРОГРЕСС</label>
       <input type="file" id="file-input" accept=".json,.txt" onchange="loadFile(event)">
       <textarea id="text-input" placeholder="Или вставьте JSON сюда..." oninput="parseInputText(this.value)"></textarea>
-      <button class="btn btn-export" onclick="exportJSON()">💾 СКАЧАТЬ ВСЕ СЛОВАРИ И ПРОГРЕСС</button>
+      <button class="btn btn-export" onclick="exportJSON()">💾 выгрузить весь прогресс</button>
     </div>
   </div>
 
@@ -126,7 +126,7 @@
     <div class="header">
       <button class="btn-exit" onclick="finishSession()">Завершить</button>
       <button class="btn-dir" id="quiz-hint-btn" onclick="toggleQuizHint()">💡 Подсказка: ВКЛ</button>
-      <button class="btn-dir" id="quiz-dir-btn" onclick="toggleDir('quiz')">⇄ A ➔ B</button>
+      <button class="btn-dir" id="quiz-dir-btn" onclick="toggleDir('quiz')">Перевод</button>
     </div>
     <div class="quiz-prompt" id="quiz-prompt">Word</div>
     <div class="quiz-options" id="quiz-options"></div>
@@ -136,7 +136,7 @@
   <div id="screen-cards" class="screen hidden">
     <div class="header">
       <button class="btn-exit" onclick="finishSession()">Завершить</button>
-      <button class="btn-dir" id="cards-dir-btn" onclick="toggleDir('cards')">⇄ A ➔ B</button>
+      <button class="btn-dir" id="cards-dir-btn" onclick="toggleDir('cards')">Перевод</button>
     </div>
     <div class="flash-stats" id="flash-stats">показано 0 карточек</div>
     <div class="flash-card" id="flash-card-el" onclick="flipCard()">
@@ -156,7 +156,7 @@
   <div id="screen-input" class="screen hidden">
     <div class="header">
       <button class="btn-exit" onclick="finishSession()">Завершить</button>
-      <button class="btn-dir" id="input-dir-btn" onclick="toggleDir('input')">⇄ A ➔ B</button>
+      <button class="btn-dir" id="input-dir-btn" onclick="toggleDir('input')">Перевод</button>
     </div>
     <div class="quiz-prompt" id="input-prompt">Word</div>
     <input type="text" class="input-field" id="type-input" placeholder="Введите перевод..." autocomplete="off">
@@ -203,7 +203,7 @@
   function getRandomPair(excludePairs = []) { const active = getActivePairs().filter(p => !excludePairs.includes(p)); const pool = active.length > 0 ? active : getActivePairs(); if (pool.length === 0) return WORD_PAIRS[0]; const minScore = Math.min(...pool.map(p => p[2])), weights = pool.map(p => Math.exp((minScore - p[2]) / 3)); let rand = Math.random() * weights.reduce((a, b) => a + b, 0); for (let i = 0; i < pool.length; i++) { rand -= weights[i]; if (rand <= 0) return pool[i]; } return pool[0]; }
   function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
   function startMode(mode) { if (!CURRENT_DICT_NAME || WORD_PAIRS.length === 0) return alert('Загрузите или выберите словарь!'); const active = getActivePairs(); if (active.length < 1) return alert('Все слова в этом словаре изучены!'); if (mode === 'match' && active.length < 5) return alert('Для режима "Пары" нужно минимум 5 неизученных слов!'); if (mode === 'match') initMatch(); if (mode === 'quiz') initQuiz(); if (mode === 'cards') initCards(); if (mode === 'input') initInputMode(); }
-  function toggleDir(mode) { const states = ['AB', 'BA', 'RANDOM'], labels = { AB: '⇄ A ➔ B', BA: '⇄ B ➔ A', RANDOM: '🔀 Микс' }; directions[mode] = states[(states.indexOf(directions[mode]) + 1) % states.length]; document.getElementById(`${mode}-dir-btn`).innerText = labels[directions[mode]]; if (mode === 'quiz') nextQuizQuestion(); if (mode === 'cards') nextFlashCard(); if (mode === 'input') nextInputQuestion(); }
+  function toggleDir(mode) { const states = ['AB', 'BA', 'RANDOM'], labels = { AB: 'Перевод', BA: 'Оригинал', RANDOM: '🔀 Микс' }; directions[mode] = states[(states.indexOf(directions[mode]) + 1) % states.length]; document.getElementById(`${mode}-dir-btn`).innerText = labels[directions[mode]]; if (mode === 'quiz') nextQuizQuestion(); if (mode === 'cards') nextFlashCard(); if (mode === 'input') nextInputQuestion(); }
   function toggleQuizHint() { showQuizHint = !showQuizHint; document.getElementById('quiz-hint-btn').innerText = showQuizHint ? '💡 Подсказка: ВКЛ' : '💡 Подсказка: ВЫКЛ'; }
   function getDirPair(pair, mode) { let modeDir = directions[mode], isAB = modeDir === 'AB' ? true : (modeDir === 'BA' ? false : Math.random() < 0.5); return isAB ? { q: pair[0], a: pair[1] } : { q: pair[1], a: pair[0] }; }
   function getSimilarity(s1, s2) { let str1 = s1.toLowerCase().trim(), str2 = s2.toLowerCase().trim(); if (str1 === str2) return 1.0; let l1 = str1.length, l2 = str2.length; if (l1 === 0 || l2 === 0) return 0; let matrix = Array(l2 + 1).fill(null).map(() => Array(l1 + 1).fill(null)); for (let i = 0; i <= l1; i++) matrix[0][i] = i; for (let j = 0; j <= l2; j++) matrix[j][0] = j; for (let j = 1; j <= l2; j++) { for (let i = 1; i <= l1; i++) { let cost = str1[i - 1] === str2[j - 1] ? 0 : 1; matrix[j][i] = Math.min(matrix[j][i - 1] + 1, matrix[j - 1][i] + 1, matrix[j - 1][i - 1] + cost); } } return (Math.max(l1, l2) - matrix[l2][l1]) / Math.max(l1, l2); }
