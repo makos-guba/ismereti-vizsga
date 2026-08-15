@@ -30,7 +30,8 @@
     .btn-export { background: #ffc800; border-bottom-color: #d7a800; color: #131f24; }
     .btn-delete-learned { background: #202f36; border: 1px solid #ea2b2b; color: #ff4b4b; border-radius: 12px; padding: 12px; font-size: 13px; font-weight: bold; cursor: pointer; width: 100%; }
     
-    .quiz-prompt { background: #202f36; border: 2px solid #37464f; border-radius: 16px; padding: 30px; text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 20px; flex-grow: 1; display: flex; align-items: center; justify-content: center; }
+    .quiz-prompt { background: #202f36; border: 2px solid #37464f; border-radius: 16px; padding: 30px; text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 20px; flex-grow: 1; display: flex; align-items: center; justify-content: center; word-break: break-word; box-sizing: border-box; }
+    .input-prompt {background: #202f36; border: 2px solid #37464f; border-radius: 16px; padding: 16px; text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 20px; flex-grow: 0; display: flex; align-items: center; justify-content: center; word-break: break-word; box-sizing: border-box; min-height: 120px; }
     .input-field { width: 100%; background: #202f36; border: 2px solid #37464f; border-radius: 12px; padding: 14px; color: #fff; font-size: 16px; text-align: center; outline: none; }
 
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
@@ -183,7 +184,7 @@
       <button class="btn-limit" id="input-limit-btn" onclick="toggleLimit('input')">10 шт</button>
       <button class="btn-dir" id="input-dir-btn" onclick="toggleDir('input')">Перевод</button>
     </div>
-    <div class="quiz-prompt" id="input-prompt">Word</div>
+    <div class="input-prompt" id="input-prompt">Word</div>
     <input type="text" class="input-field" id="type-input" placeholder="Введите перевод..." autocomplete="off">
     <button class="btn" onclick="checkTypedAnswer()">ПРОВЕРИТЬ</button>
   </div>
