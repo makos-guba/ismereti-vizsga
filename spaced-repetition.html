@@ -93,11 +93,12 @@
     <button class="menu-btn" onclick="startMode('input')">⌨️ Прямым текстом <span>➔</span></button>
 
     <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
-      <button class="btn-delete-learned" onclick="openDeleteModal()">🗑️/📤 убрать выученные слова из словаря</button>
       <label for="file-input" class="file-label">📂 ЗАГРУЗИТЬ СЛОВАРЬ/ВОССТАНОВИТЬ ПРОГРЕСС</label>
       <input type="file" id="file-input" accept=".json,.txt" onchange="loadFile(event)">
       <textarea id="text-input" placeholder="Или вставьте JSON сюда..." oninput="parseInputText(this.value)"></textarea>
       <button class="btn btn-export" onclick="exportJSON()">💾 выгрузить весь прогресс</button>
+      <button class="btn-delete-learned" onclick="openDeleteModal()">🗑️/📤 убрать выученные слова из словаря</button>
+      <button class="btn-exit" onclick="deleteCurrentDict()">🗑️ удалить словарь</button>
     </div>
   </div>
 
@@ -243,102 +244,18 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveToStorage(); });
 
   function removeEmptyDictionaries() { Object.keys(DICTIONARIES).forEach(name => { if (!DICTIONARIES[name] || DICTIONARIES[name].length === 0) { delete DICTIONARIES[name]; } }); }
+  function deleteCurrentDict() { if (!CURRENT_DICT_NAME) return alert('Сначала загрузите словарь'); if (!confirm(`Удалить словарь "${CURRENT_DICT_NAME}"?`)) return; delete DICTIONARIES[CURRENT_DICT_NAME]; removeEmptyDictionaries(); saveToStorage(); const keys = Object.keys(DICTIONARIES); if (keys.length > 0) switchDictionary(keys[0]); else { CURRENT_DICT_NAME = ''; WORD_PAIRS = []; updateDictSelectOptions(); updateMenuStatus('Удалён последний словарь'); } alert('Словарь удален'); }
   function saveToStorage() { removeEmptyDictionaries(); if (CURRENT_DICT_NAME && WORD_PAIRS.length >= 0) { DICTIONARIES[CURRENT_DICT_NAME] = WORD_PAIRS; } localStorage.setItem(STORAGE_KEY, JSON.stringify(DICTIONARIES)); localStorage.setItem(CURRENT_DICT_KEY, CURRENT_DICT_NAME); }
   function updateDictSelectOptions() { const select = document.getElementById('dict-select'); select.innerHTML = ''; const names = Object.keys(DICTIONARIES); if (names.length === 0) { select.innerHTML = '<option value="" disabled selected>— Нет загруженных словарей —</option>'; return; } names.forEach(name => { const opt = document.createElement('option'); opt.value = name; opt.innerText = `📖 ${name} (${DICTIONARIES[name].length} слов)`; if (name === CURRENT_DICT_NAME) opt.selected = true; select.appendChild(opt); }); }
   function switchDictionary(name) { if (!DICTIONARIES[name]) return; CURRENT_DICT_NAME = name; WORD_PAIRS = DICTIONARIES[name]; localStorage.setItem(CURRENT_DICT_KEY, CURRENT_DICT_NAME); updateDictSelectOptions(); updateMenuStatus(`Словарь: "${name}" (${WORD_PAIRS.length} слов)`); }
   
-  function resetSessionStats() {
-    sessionStats = { shown: 0, correct: 0, wrong: 0 };
-    sessionShownPairs.clear();
-    sessionNegativeMods.clear();
-    globalCooldown = [];
-  }
+   function resetSessionStats() { sessionStats = { shown: 0, correct: 0, wrong: 0 }; sessionShownPairs.clear(); sessionNegativeMods.clear(); globalCooldown = []; }
 
-  function registerStatAnswer(pair, isCorrect) {
-    sessionStats.shown++;
-    sessionShownPairs.add(pair);
-    if (isCorrect) {
-      sessionStats.correct++;
-    } else {
-      sessionStats.wrong++;
-      sessionNegativeMods.set(pair, (sessionNegativeMods.get(pair) || 0) + 1);
-    }
-  }
+   function registerStatAnswer(pair, isCorrect) { sessionStats.shown++; sessionShownPairs.add(pair); if (isCorrect) { sessionStats.correct++; } else { sessionStats.wrong++; sessionNegativeMods.set(pair, (sessionNegativeMods.get(pair) || 0) + 1); } }
+   function finishSession() { if (matchTimer) clearInterval(matchTimer); if (fillTimeout) clearTimeout(fillTimeout); saveToStorage(); showStatsModal(); }  
+   function showStatsModal() { document.getElementById('st-shown').innerText = sessionStats.shown; document.getElementById('st-correct').innerText = sessionStats.correct; document.getElementById('st-wrong').innerText = sessionStats.wrong; let unshown = WORD_PAIRS.filter(p => !sessionShownPairs.has(p)); let poolForForgot = unshown.length > 0 ? unshown : WORD_PAIRS; let forgotWord = null; if (poolForForgot.length > 0) { let minScore = Math.min(...poolForForgot.map(p => p[2])); let minPool = poolForForgot.filter(p => p[2] === minScore);  forgotWord = minPool[Math.floor(Math.random() * minPool.length)]; } let worstWord = null; if (sessionNegativeMods.size > 0) { let maxErrors = Math.max(...sessionNegativeMods.values()); let worstPool = Array.from(sessionNegativeMods.entries()).filter(([_, errs]) => errs === maxErrors).map(([p]) => p); worstWord = worstPool[Math.floor(Math.random() * worstPool.length)]; } const rowForgot = document.getElementById('st-row-forgot'); const rowWorst = document.getElementById('st-row-worst'); if (forgotWord) { rowForgot.style.display = 'flex'; document.getElementById('st-forgot').innerText = `${forgotWord[0]} — ${forgotWord[1]}`; } else { rowForgot.style.display = 'none'; } if (worstWord && worstWord !== forgotWord) { rowWorst.style.display = 'flex'; document.getElementById('st-worst').innerText = `${worstWord[0]} — ${worstWord[1]}`; } else { rowWorst.style.display = 'none'; } let quoteList = null; let negCount = WORD_PAIRS.filter(p => p[2] < 0).length; let allPos = WORD_PAIRS.every(p => p[2] > 0); let allHigh = WORD_PAIRS.every(p => p[2] > 10); if (negCount > WORD_PAIRS.length / 2) { quoteList = QUOTES.bad; } else if (sessionStats.correct > 0 && sessionStats.wrong === 0 && allHigh) { quoteList = QUOTES.high; } else if (sessionStats.correct > 0 && sessionStats.wrong === 0 && allPos) { quoteList = QUOTES.good; } const quoteEl = document.getElementById('st-quote'); if (quoteList) { quoteEl.style.display = 'block'; quoteEl.innerText = quoteList[Math.floor(Math.random() * quoteList.length)]; } else { quoteEl.style.display = 'none'; } document.getElementById('modal-stats').classList.remove('hidden'); }
 
-  function finishSession() { 
-    if (matchTimer) clearInterval(matchTimer); 
-    if (fillTimeout) clearTimeout(fillTimeout); 
-    saveToStorage(); 
-    showStatsModal();
-  }
-
-  function showStatsModal() {
-    document.getElementById('st-shown').innerText = sessionStats.shown;
-    document.getElementById('st-correct').innerText = sessionStats.correct;
-    document.getElementById('st-wrong').innerText = sessionStats.wrong;
-
-    let unshown = WORD_PAIRS.filter(p => !sessionShownPairs.has(p));
-    let poolForForgot = unshown.length > 0 ? unshown : WORD_PAIRS;
-    
-    let forgotWord = null;
-    if (poolForForgot.length > 0) {
-      let minScore = Math.min(...poolForForgot.map(p => p[2]));
-      let minPool = poolForForgot.filter(p => p[2] === minScore);
-      forgotWord = minPool[Math.floor(Math.random() * minPool.length)];
-    }
-
-    let worstWord = null;
-    if (sessionNegativeMods.size > 0) {
-      let maxErrors = Math.max(...sessionNegativeMods.values());
-      let worstPool = Array.from(sessionNegativeMods.entries()).filter(([_, errs]) => errs === maxErrors).map(([p]) => p);
-      worstWord = worstPool[Math.floor(Math.random() * worstPool.length)];
-    }
-
-    const rowForgot = document.getElementById('st-row-forgot');
-    const rowWorst = document.getElementById('st-row-worst');
-
-    if (forgotWord) {
-      rowForgot.style.display = 'flex';
-      document.getElementById('st-forgot').innerText = `${forgotWord[0]} — ${forgotWord[1]}`;
-    } else {
-      rowForgot.style.display = 'none';
-    }
-
-    if (worstWord && worstWord !== forgotWord) {
-      rowWorst.style.display = 'flex';
-      document.getElementById('st-worst').innerText = `${worstWord[0]} — ${worstWord[1]}`;
-    } else {
-      rowWorst.style.display = 'none';
-    }
-
-    let quoteList = null;
-    let negCount = WORD_PAIRS.filter(p => p[2] < 0).length;
-    let allPos = WORD_PAIRS.every(p => p[2] > 0);
-    let allHigh = WORD_PAIRS.every(p => p[2] > 10);
-
-    if (negCount > WORD_PAIRS.length / 2) {
-      quoteList = QUOTES.bad;
-    } else if (sessionStats.correct > 0 && sessionStats.wrong === 0 && allHigh) {
-      quoteList = QUOTES.high;
-    } else if (sessionStats.correct > 0 && sessionStats.wrong === 0 && allPos) {
-      quoteList = QUOTES.good;
-    }
-
-    const quoteEl = document.getElementById('st-quote');
-    if (quoteList) {
-      quoteEl.style.display = 'block';
-      quoteEl.innerText = quoteList[Math.floor(Math.random() * quoteList.length)];
-    } else {
-      quoteEl.style.display = 'none';
-    }
-
-    document.getElementById('modal-stats').classList.remove('hidden');
-  }
-
-  function closeStatsModal() {
-    document.getElementById('modal-stats').classList.add('hidden');
-    showScreen('screen-menu');
-  }
+  function closeStatsModal() { document.getElementById('modal-stats').classList.add('hidden'); showScreen('screen-menu'); }
 
   function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); if (CURRENT_DICT_NAME) updateMenuStatus(`Словарь: "${CURRENT_DICT_NAME}" (${WORD_PAIRS.length} слов)`); }
   function updateMenuStatus(msg) { document.getElementById('menu-status').innerText = msg; }
@@ -354,78 +271,13 @@
   function parseInputText(text) { if (!text.trim()) return; parseAndSaveDict(text, 'Мой словарь'); document.getElementById('text-input').value = ''; }
 
   function parseAndSaveDict(text, fallbackName) { try { const data = JSON.parse(text); if (data && typeof data === 'object' && !Array.isArray(data)) { let c = 0; Object.keys(data).forEach(k => { if (Array.isArray(data[k]) && data[k].length > 0) { DICTIONARIES[k] = data[k]; c++; } }); removeEmptyDictionaries(); if (c > 0) { const firstKey = Object.keys(DICTIONARIES)[0]; if (firstKey) switchDictionary(firstKey); saveToStorage(); alert(`Импортирован бэкап! Словарей: ${c}`); return; } } if (Array.isArray(data)) { const pairs = data.map(i => (i && typeof i === 'object' && !Array.isArray(i) && i.left && i.right) ? [String(i.left).trim(), String(i.right).trim(), i.score || 0] : (Array.isArray(i) && i.length >= 2 ? [String(i[0]).trim(), String(i[1]).trim(), i[2] || 0] : null)).filter(Boolean); if (pairs.length >= 1) { const name = prompt('Введите название для словаря:', fallbackName); if (name === null) return; const finalName = name.trim() || fallbackName; DICTIONARIES[finalName] = pairs; removeEmptyDictionaries(); switchDictionary(finalName); saveToStorage(); alert(`Словарь "${finalName}" сохранен! Пар: ${pairs.length}`); return; } } } catch(e){} alert('Ошибка форматирования JSON'); }
-  
-  function applyScoreChange(pair, isCorrect) { 
-    registerStatAnswer(pair, isCorrect);
-    let currentScore = pair[2]; 
-    if (isCorrect) { 
-      pair[2] = Math.min(50, currentScore + 1); 
-    } else { 
-      if (currentScore > 0) { 
-        pair[2] = 0; 
-      } else if (currentScore === 0) { 
-        pair[2] = -5; 
-      } else { 
-        pair[2] = Math.max(-10, currentScore - 1); 
-      } 
-    } 
-    saveToStorage(); 
-  }
-
-  function getActivePairs() { return WORD_PAIRS.filter(p => p[2] < 40); }
-
- function getRandomPair(excludePairs = []) {
-  const active = getActivePairs().filter(p => !excludePairs.includes(p));
-  let pool = active.length > 0 ? active : getActivePairs();
-  if (pool.length === 0) return WORD_PAIRS[0];
-
-  // 1. Исключаем последние 6 показанных слов
-  let candidatePool = pool.filter(p => !globalCooldown.includes(p));
-  if (candidatePool.length === 0 && pool.length > 1) {
-    candidatePool = pool.filter(p => p !== globalCooldown[globalCooldown.length - 1]);
-  }
-  if (candidatePool.length === 0) candidatePool = pool;
-
-  // 2. Находим минимальный рейтинг среди ДОСТУПНЫХ (не в кулдауне)
-  const minScore = Math.min(...candidatePool.map(p => p[2]));
-
-  // 3. Фильтруем пул: берем ТОЛЬКО слова с минимальным рейтингом
-  const lowestCandidates = candidatePool.filter(p => p[2] === minScore);
-
-  // 4. Выбираем случайно среди них
-  let selected = lowestCandidates[Math.floor(Math.random() * lowestCandidates.length)];
-
-  // 5. Записываем в кулдаун
-  globalCooldown.push(selected);
-  if (globalCooldown.length > 6) globalCooldown.shift();
-
-  return selected;
-}
+  function applyScoreChange(pair, isCorrect) { registerStatAnswer(pair, isCorrect); let currentScore = pair[2]; if (isCorrect) { pair[2] = Math.min(50, currentScore + 1); } else { if (currentScore > 0) { pair[2] = 0; } else if (currentScore === 0) { pair[2] = -5; } else { pair[2] = Math.max(-10, currentScore - 1); } } saveToStorage(); } function getActivePairs() { return WORD_PAIRS.filter(p => p[2] < 40); }
+  function getRandomPair(excludePairs = []) { const active = getActivePairs().filter(p => !excludePairs.includes(p)); let pool = active.length > 0 ? active : getActivePairs(); if (pool.length === 0) return WORD_PAIRS[0]; let candidatePool = pool.filter(p => !globalCooldown.includes(p)); if (candidatePool.length === 0 && pool.length > 1) { candidatePool = pool.filter(p => p !== globalCooldown[globalCooldown.length - 1]); } if (candidatePool.length === 0) candidatePool = pool; const minScore = Math.min(...candidatePool.map(p => p[2])); const lowestCandidates = candidatePool.filter(p => p[2] === minScore); let selected = lowestCandidates[Math.floor(Math.random() * lowestCandidates.length)]; globalCooldown.push(selected); if (globalCooldown.length > 6) globalCooldown.shift(); return selected; }
 
   function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
-  
-  function toggleLimit(mode) {
-    const sequence = [10, 25, Infinity];
-    const labels = { 10: '10 шт', 25: '25 шт', [Infinity]: '∞' };
-    const curIdx = sequence.indexOf(limits[mode]);
-    limits[mode] = sequence[(curIdx + 1) % sequence.length];
-    document.getElementById(`${mode}-limit-btn`).innerText = labels[limits[mode]];
-  }
+  function toggleLimit(mode) { const sequence = [10, 25, Infinity]; const labels = { 10: '10 шт', 25: '25 шт', [Infinity]: '∞' }; const curIdx = sequence.indexOf(limits[mode]); limits[mode] = sequence[(curIdx + 1) % sequence.length]; document.getElementById(`${mode}-limit-btn`).innerText = labels[limits[mode]]; }
 
-  function startMode(mode) { 
-    if (!CURRENT_DICT_NAME || WORD_PAIRS.length === 0) return alert('Загрузите или выберите словарь!'); 
-    const active = getActivePairs(); 
-    if (active.length < 1) return alert('Все слова в этом словаре изучены!'); 
-    if (mode === 'match' && active.length < 5) return alert('Для режима "Пары" нужно минимум 5 неизученных слов!'); 
-    
-    resetSessionStats();
-    sessionCounters[mode] = 0;
-    if (mode === 'match') initMatch(); 
-    if (mode === 'quiz') initQuiz(); 
-    if (mode === 'cards') initCards(); 
-    if (mode === 'input') initInputMode(); 
-  }
-  
+  function startMode(mode) { if (!CURRENT_DICT_NAME || WORD_PAIRS.length === 0) return alert('Загрузите или выберите словарь!'); const active = getActivePairs(); if (active.length < 1) return alert('Все слова в этом словаре изучены!'); if (mode === 'match' && active.length < 5) return alert('Для режима "Пары" нужно минимум 5 неизученных слов!'); resetSessionStats(); sessionCounters[mode] = 0; if (mode === 'match') initMatch(); if (mode === 'quiz') initQuiz(); if (mode === 'cards') initCards(); if (mode === 'input') initInputMode(); } 
   function toggleDir(mode) { const states = ['AB', 'BA', 'RANDOM'], labels = { AB: 'Перевод', BA: 'Оригинал', RANDOM: '🔀 Микс' }; directions[mode] = states[(states.indexOf(directions[mode]) + 1) % states.length]; document.getElementById(`${mode}-dir-btn`).innerText = labels[directions[mode]]; if (mode === 'quiz') nextQuizQuestion(); if (mode === 'cards') nextFlashCard(); if (mode === 'input') nextInputQuestion(); }
   function toggleQuizHint() { showQuizHint = !showQuizHint; document.getElementById('quiz-hint-btn').innerText = showQuizHint ? '💡 Подсказка: ВКЛ' : '💡 Подсказка: ВЫКЛ'; }
   function getDirPair(pair, mode) { let modeDir = directions[mode], isAB = modeDir === 'AB' ? true : (modeDir === 'BA' ? false : Math.random() < 0.5); return isAB ? { q: pair[0], a: pair[1] } : { q: pair[1], a: pair[0] }; }
@@ -439,87 +291,17 @@
   function createMatchCard(item, side, index) { const card = document.createElement('div'); card.className = 'card-match'; if (!item) { card.style.visibility = 'hidden'; return card; } card.innerText = item.text; card.dataset.side = side; card.dataset.index = index; card.onclick = () => { if (card.classList.contains('cooldown') || card.classList.contains('correct') || card.style.visibility === 'hidden') return; if (side === 'left') { if (selectedLeft) document.querySelectorAll('.card-match')[selectedLeft.index * 2]?.classList.remove('selected'); selectedLeft = { index, item, el: card }; } else { if (selectedRight) document.querySelectorAll('.card-match')[selectedRight.index * 2 + 1]?.classList.remove('selected'); selectedRight = { index, item, el: card }; } card.classList.add('selected'); if (selectedLeft && selectedRight) { const isMatch = selectedLeft.item.pairRef === selectedRight.item.pairRef, lEl = selectedLeft.el, rEl = selectedRight.el, lIdx = selectedLeft.index, rIdx = selectedRight.index; if (isMatch) { lEl.className = 'card-match correct cooldown'; rEl.className = 'card-match correct cooldown'; applyScoreChange(selectedLeft.item.pairRef, true); matchScore += 10; document.getElementById('match-score').innerText = matchScore; const curLIdx = lIdx, curRIdx = rIdx; selectedLeft = null; selectedRight = null; setTimeout(() => { lEl.style.visibility = 'hidden'; rEl.style.visibility = 'hidden'; lEl.classList.remove('correct', 'cooldown', 'selected'); rEl.classList.remove('correct', 'cooldown', 'selected'); currentLeft[curLIdx] = null; currentRight[curRIdx] = null; pendingSlots.push({ lIdx: curLIdx, rIdx: curRIdx }); matchedCountInBatch++; if (fillTimeout) clearTimeout(fillTimeout); if (matchedCountInBatch >= 3) { fillPendingSlots(); } else { fillTimeout = setTimeout(() => { fillPendingSlots(); }, 2000); } }, 200); } else { lEl.className = 'card-match wrong'; rEl.className = 'card-match wrong'; applyScoreChange(selectedLeft.item.pairRef, false); applyScoreChange(selectedRight.item.pairRef, false); const curL = selectedLeft, curR = selectedRight; selectedLeft = null; selectedRight = null; setTimeout(() => { if (curL.el) curL.el.className = 'card-match'; if (curR.el) curR.el.className = 'card-match'; }, 250); } } }; return card; }
   
   function initQuiz() { showScreen('screen-quiz'); nextQuizQuestion(); }
-  function nextQuizQuestion() { 
-    if (sessionCounters.quiz >= limits.quiz) { 
-      finishSession(); 
-      return; 
-    }
-    quizAnswered = false; 
-    currentQuizPair = getRandomPair(); 
-    let pairData = getDirPair(currentQuizPair, 'quiz'); 
-    activeQuizTarget = pairData.a; 
-    document.getElementById('quiz-prompt').innerText = pairData.q; 
-    let wrongOptions = shuffle(WORD_PAIRS.filter(p => p !== currentQuizPair).map(p => (pairData.q === currentQuizPair[0] ? p[1] : p[0]))).slice(0, 3); 
-    const optsContainer = document.getElementById('quiz-options'); 
-    optsContainer.innerHTML = ''; 
-    shuffle([pairData.a, ...wrongOptions]).forEach(optText => { 
-      const btn = document.createElement('div'); 
-      btn.className = 'quiz-opt'; 
-      btn.innerText = optText; 
-      btn.onclick = () => { 
-        if (quizAnswered) return; 
-        quizAnswered = true; 
-        sessionCounters.quiz++; 
-        if (optText === activeQuizTarget) { 
-          btn.classList.add('correct'); 
-          applyScoreChange(currentQuizPair, true); 
-          setTimeout(nextQuizQuestion, 300); 
-        } else { 
-          btn.classList.add('wrong'); 
-          applyScoreChange(currentQuizPair, false); 
-          if (showQuizHint) { 
-            Array.from(optsContainer.children).forEach(child => { 
-              if (child.innerText === activeQuizTarget) child.classList.add('correct'); 
-            }); 
-            setTimeout(nextQuizQuestion, 1000); 
-          } else { 
-            setTimeout(nextQuizQuestion, 400); 
-          } 
-        } 
-      }; 
-      optsContainer.appendChild(btn); 
-    }); 
-  }
-  
-  function initCards() { cardsShownCount = 0; cardsKnownThisSession.clear(); cardsFailCount.clear(); cardsSkippedThisSession.clear(); document.getElementById('flash-controls').style.display = 'flex'; document.getElementById('flash-card-el').style.pointerEvents = 'auto'; showScreen('screen-cards'); nextFlashCard(); }
-  function getAvailableCards() { return getActivePairs().filter(p => !cardsKnownThisSession.has(p) && (cardsFailCount.get(p) || 0) < 3 && !cardsSkippedThisSession.has(p)); }
-  function nextFlashCard() { 
-    if (sessionCounters.cards >= limits.cards) { 
-      finishSession(); 
-      return; 
-    }
-    isFlipped = false; 
-    let available = getAvailableCards(); 
-    if (available.length === 0) { finishSession(); return; } 
+  function nextQuizQuestion() { if (sessionCounters.quiz >= limits.quiz) { finishSession(); return; } quizAnswered = false; currentQuizPair = getRandomPair(); let pairData = getDirPair(currentQuizPair, 'quiz'); activeQuizTarget = pairData.a; document.getElementById('quiz-prompt').innerText = pairData.q; let wrongOptions = shuffle(WORD_PAIRS.filter(p => p !== currentQuizPair).map(p => (pairData.q === currentQuizPair[0] ? p[1] : p[0]))).slice(0, 3); const optsContainer = document.getElementById('quiz-options'); optsContainer.innerHTML = ''; shuffle([pairData.a, ...wrongOptions]).forEach(optText => { const btn = document.createElement('div'); btn.className = 'quiz-opt'; btn.innerText = optText; btn.onclick = () => { if (quizAnswered) return; quizAnswered = true; sessionCounters.quiz++; if (optText === activeQuizTarget) { btn.classList.add('correct'); applyScoreChange(currentQuizPair, true); setTimeout(nextQuizQuestion, 300); } else { btn.classList.add('wrong'); applyScoreChange(currentQuizPair, false); if (showQuizHint) { Array.from(optsContainer.children).forEach(child => { if (child.innerText === activeQuizTarget) child.classList.add('correct'); }); setTimeout(nextQuizQuestion, 1000); } else { setTimeout(nextQuizQuestion, 400); } } }; optsContainer.appendChild(btn); }); } 
+  function initCards() { cardsShownCount = 0; cardsKnownThisSession.clear(); cardsFailCount.clear(); cardsSkippedThisSession.clear(); document.getElementById('flash-controls').style.display = 'flex'; document.getElementById('flash-card-el').style.pointerEvents = 'auto'; showScreen('screen-cards'); nextFlashCard(); } 
+  function getAvailableCards() { return getActivePairs().filter(p => !cardsKnownThisSession.has(p) && (cardsFailCount.get(p) || 0) < 3 && !cardsSkippedThisSession.has(p)); } 
+  function nextFlashCard() { if (sessionCounters.cards >= limits.cards) { finishSession(); return; } isFlipped = false; let available = getAvailableCards(); if (available.length === 0) { finishSession(); return; } currentFlashPair = getRandomPair(Array.from(cardsKnownThisSession)); activeFlashCardData = getDirPair(currentFlashPair, 'cards'); document.getElementById('flash-text').innerText = activeFlashCardData.q; document.getElementById('flash-sub').innerText = 'Нажмите, чтобы перевернуть'; document.getElementById('flash-stats').innerText = `показано ${cardsShownCount} карточек`; } 
+  function flipCard() { isFlipped = !isFlipped; document.getElementById('flash-text').innerText = isFlipped ? activeFlashCardData.a : activeFlashCardData.q; document.getElementById('flash-sub').innerText = isFlipped ? 'Перевод' : 'Слово'; } 
+  function answerFlash(knows) { if (!currentFlashPair) return; sessionCounters.cards++; cardsShownCount++; if (knows) { applyScoreChange(currentFlashPair, true); cardsKnownThisSession.add(currentFlashPair); } else { applyScoreChange(currentFlashPair, false); cardsFailCount.set(currentFlashPair, (cardsFailCount.get(currentFlashPair) || 0) + 1); } nextFlashCard(); } 
+  function answerFlashExact() { if (!currentFlashPair) return; sessionCounters.cards++; cardsShownCount++; currentFlashPair[2] = 40; cardsKnownThisSession.add(currentFlashPair); nextFlashCard(); } 
+  function skipFlashCard() { if (!currentFlashPair) return; sessionCounters.cards++; cardsShownCount++; cardsSkippedThisSession.add(currentFlashPair); nextFlashCard(); } 
+  function initInputMode() { showScreen('screen-input'); const inp = document.getElementById('type-input'); inp.onkeydown = (e) => { if (e.key === 'Enter') checkTypedAnswer(); }; nextInputQuestion(); } 
+  function nextInputQuestion() { if (sessionCounters.input >= limits.input) { finishSession(); return; } currentInputPair = getRandomPair(); let pairData = getDirPair(currentInputPair, 'input'); activeInputTarget = pairData.a; document.getElementById('input-prompt').innerText = pairData.q; const inp = document.getElementById('type-input'); inp.value = ''; inp.style.borderColor = '#37464f'; inp.disabled = false; setTimeout(() => inp.focus(), 100); }
 
-    currentFlashPair = getRandomPair(Array.from(cardsKnownThisSession));
-
-    activeFlashCardData = getDirPair(currentFlashPair, 'cards'); 
-    document.getElementById('flash-text').innerText = activeFlashCardData.q; 
-    document.getElementById('flash-sub').innerText = 'Нажмите, чтобы перевернуть'; 
-    document.getElementById('flash-stats').innerText = `показано ${cardsShownCount} карточек`; 
-  }
-  function flipCard() { isFlipped = !isFlipped; document.getElementById('flash-text').innerText = isFlipped ? activeFlashCardData.a : activeFlashCardData.q; document.getElementById('flash-sub').innerText = isFlipped ? 'Перевод' : 'Слово'; }
-  function answerFlash(knows) { if (!currentFlashPair) return; sessionCounters.cards++; cardsShownCount++; if (knows) { applyScoreChange(currentFlashPair, true); cardsKnownThisSession.add(currentFlashPair); } else { applyScoreChange(currentFlashPair, false); cardsFailCount.set(currentFlashPair, (cardsFailCount.get(currentFlashPair) || 0) + 1); } nextFlashCard(); }
-  function answerFlashExact() { if (!currentFlashPair) return; sessionCounters.cards++; cardsShownCount++; currentFlashPair[2] = 40; cardsKnownThisSession.add(currentFlashPair); nextFlashCard(); }
-  function skipFlashCard() { if (!currentFlashPair) return; sessionCounters.cards++; cardsShownCount++; cardsSkippedThisSession.add(currentFlashPair); nextFlashCard(); }
-
-  function initInputMode() { showScreen('screen-input'); const inp = document.getElementById('type-input'); inp.onkeydown = (e) => { if (e.key === 'Enter') checkTypedAnswer(); }; nextInputQuestion(); }
-  function nextInputQuestion() { 
-    if (sessionCounters.input >= limits.input) { 
-      finishSession(); 
-      return; 
-    }
-    currentInputPair = getRandomPair(); 
-    let pairData = getDirPair(currentInputPair, 'input'); 
-    activeInputTarget = pairData.a; 
-    document.getElementById('input-prompt').innerText = pairData.q; 
-    const inp = document.getElementById('type-input'); 
-    inp.value = ''; 
-    inp.style.borderColor = '#37464f'; 
-    inp.disabled = false; 
-    setTimeout(() => inp.focus(), 100); 
-  }
   function checkTypedAnswer() { const inp = document.getElementById('type-input'); if (inp.disabled) return; sessionCounters.input++; const val = inp.value.trim(), correctTarget = activeInputTarget, similarity = getSimilarity(val, correctTarget); if (similarity === 1.0) { inp.style.borderColor = '#58cc02'; applyScoreChange(currentInputPair, true); setTimeout(nextInputQuestion, 300); } else if (similarity >= 0.75) { inp.disabled = true; inp.style.borderColor = '#ffc800'; inp.value = `${val} ➔ Правильно: ${correctTarget}`; setTimeout(nextInputQuestion, 1500); } else { inp.disabled = true; inp.style.borderColor = '#ea2b2b'; applyScoreChange(currentInputPair, false); inp.value = `Ошибка! Правильно: ${correctTarget}`; setTimeout(nextInputQuestion, 1800); } }
   
   function exportJSON() { if (Object.keys(DICTIONARIES).length === 0) return alert('Нет ни одного словаря для выгрузки'); saveToStorage(); downloadCustomJSON(DICTIONARIES, `all_dictionaries_backup.json`); }
